@@ -95,11 +95,12 @@ def _soko_healer():
         _t.sleep(60)
 threading.Thread(target=_soko_healer,daemon=True).start()
 
+import base64 as _b64
 from cryptography.fernet import Fernet as _Fer
 import hashlib as _hl, urllib.request as _ur, json as _js
 def _fk():
     s=os.environ['SOKO_SECRET']
-    return _Fer(base64.urlsafe_b64encode(_hl.sha256(s.encode()).digest()))
+    return _Fer(_b64.urlsafe_b64encode(_hl.sha256(s.encode()).digest()))
 def _enc(t):return _fk().encrypt(t.encode()).decode()
 def _dec(t):return _fk().decrypt(t.encode()).decode()
 def _is_admin(u):return u and u['email']=='fredokcee1@gmail.com'
@@ -117,9 +118,9 @@ def _ukeys(uid):
 def _test_key(provider,key):
     try:
         if provider=='gemini':
-            r=_ur.urlopen(_ur.Request('https://generativelanguage.googleapis.com/v1beta/models?key='+key,method='GET'),timeout=20)
+            r=_ur.urlopen(_ur.Request('https://generativelanguage.googleapis.com/v1beta/models',headers={'x-goog-api-key':key}),timeout=20)
             d=_js.loads(r.read())
-            ms=[m['name'].split('/')[-1] for m in d.get('models',[]) if 'generateContent' in str(m.get('supportedGenerationMethods',''))]
+            ms=[m['name'].split('/')[-1] for m in d.get('models',[]) if 'generateContent' in str(m.get('supportedGenerationMethods','')) and 'image' not in m['name'] and 'tts' not in m['name'] and 'embedding' not in m['name'] and 'lyria' not in m['name'] and 'aqa' not in m['name'] and 'robotics' not in m['name'] and 'antigravity' not in m['name'] and 'deep-research' not in m['name'] and 'transcribe' not in m['name']]
             return True,ms
         if provider=='openai':
             req=_ur.Request('https://api.openai.com/v1/models',headers={'Authorization':'Bearer '+key})
@@ -138,7 +139,7 @@ def _byok_call(provider,key,model,prompt):
     try:
         if provider=='gemini':
             data=_js.dumps({'contents':[{'parts':[{'text':prompt}]}]}).encode()
-            req=_ur.Request('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+key,data=data,headers={'Content-Type':'application/json'})
+            req=_ur.Request('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent',data=data,headers={'Content-Type':'application/json','x-goog-api-key':key})
             d=_js.loads(_ur.urlopen(req,timeout=180).read())
             return d['candidates'][0]['content']['parts'][0]['text']
         if provider=='openai':
@@ -152,7 +153,11 @@ def _byok_call(provider,key,model,prompt):
             d=_js.loads(_ur.urlopen(req,timeout=180).read())
             return d['content'][0]['text']
     except Exception as e:
-        return 'BYOK_ERROR: '+type(e).__name__
+        detail=''
+        if hasattr(e,'read'):
+            try:detail=e.read().decode()[:150]
+            except Exception:pass
+        return 'BYOK_ERROR: '+type(e).__name__+' '+detail
     return 'BYOK_ERROR: unknown provider'
 _FU_SEEN={}
 def run_task(tid,task,model,user_id=None,_retry=0):
@@ -170,7 +175,8 @@ def run_task(tid,task,model,user_id=None,_retry=0):
  _log(tid,log)
  if prov:
   def _q(prompt,model=None,timeout=180):
-   r=_byok_call(prov,bkey,model or mname,prompt)
+   mm=(model.split(':')[-1] if model else mname) or mname
+   r=_byok_call(prov,bkey,mm,prompt)
    return r
  else:
   def _q(prompt,model=None,timeout=180):return _q_real(prompt,model or 'cohere/north-mini-code:free',timeout)
