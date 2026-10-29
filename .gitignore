@@ -1,0 +1,6 @@
+soko.db
+__pycache__/
+work/
+*.bak*
+.env
+nohup.out
